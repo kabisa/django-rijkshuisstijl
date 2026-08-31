@@ -176,6 +176,9 @@ def summary_list(context, **kwargs):
     option and pass a (Django) ModelForm class specifying fields matching the columns.
 
     - form_class: Optional, a (Django) Form class specifying the fields to be editable.
+    - prefix: Optional, the formset prefix. Required when a page shows more than one inline formset:
+      without it every formset falls back to Django's default ("form") and they all bind to the same
+      POST data, each resolving "form-<n>-id" against its own model.
     """
     config = merge_config(kwargs)
 
@@ -186,6 +189,7 @@ def summary_list(context, **kwargs):
         request = context.get("request")
         form_class = config.get("form_class")
         formset_valid = config.get("formset_valid")
+        prefix = config.get("prefix")
         model = get_model(context, config)
         queryset = get_queryset(context, config)
 
@@ -195,7 +199,9 @@ def summary_list(context, **kwargs):
         ModelFormSet = modelformset_factory(model, form_class, extra=0)
 
         if request.method == "POST":
-            formset = ModelFormSet(request.POST)
+            # Pass the queryset on POST too, so "<prefix>-<n>-id" resolves against the objects
+            # that were rendered instead of against the whole table.
+            formset = ModelFormSet(request.POST, queryset=queryset, prefix=prefix)
 
             if formset.is_valid():
                 instances = formset.save()
@@ -204,10 +210,10 @@ def summary_list(context, **kwargs):
                 config["object_list"] = queryset
                 if formset_valid:
                     formset_valid(request, instances)
-                return ModelFormSet(queryset=queryset)
+                return ModelFormSet(queryset=queryset, prefix=prefix)
             else:
                 return formset
-        return ModelFormSet(queryset=queryset)
+        return ModelFormSet(queryset=queryset, prefix=prefix)
 
     config["id"] = get_id(config, "summary-list")
     config["object_list"] = parse_kwarg(config, "object_list", [])
